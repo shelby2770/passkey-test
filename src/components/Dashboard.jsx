@@ -11,6 +11,12 @@ export default function Dashboard() {
     }
   }
 
+  // Get the user's photo URL with a fal lback
+  const userPhotoURL =
+    currentUser?.photoURL ||
+    "https://ui-avatars.com/api/?name=" +
+      encodeURIComponent(currentUser?.displayName || "User");
+
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-white shadow-sm">
@@ -25,14 +31,18 @@ export default function Dashboard() {
               <div className="flex-shrink-0">
                 <div className="flex items-center">
                   <img
-                    className="h-8 w-8 rounded-full"
-                    src={
-                      currentUser.photoURL || "https://via.placeholder.com/40"
-                    }
+                    className="h-8 w-8 rounded-full object-cover"
+                    src={userPhotoURL}
                     alt="Profile"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src =
+                        "https://ui-avatars.com/api/?name=" +
+                        encodeURIComponent(currentUser?.displayName || "User");
+                    }}
                   />
                   <span className="ml-2 text-sm font-medium text-gray-700">
-                    {currentUser.displayName || currentUser.email}
+                    {currentUser?.displayName || currentUser?.email}
                   </span>
                   <button
                     onClick={handleLogout}

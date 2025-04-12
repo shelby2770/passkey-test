@@ -1,8 +1,13 @@
 import { auth, signInWithCustomToken } from "../firebase";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+
+// Initialize Firestore
+const db = getFirestore();
 
 // Convert ArrayBuffer to Base64 string
 const bufferToBase64 = (buffer) => {
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const binary = Array.from(new Uint8Array(buffer));
+  return btoa(binary.map((byte) => String.fromCharCode(byte)).join(""));
 };
 
 // Convert Base64 string to ArrayBuffer
@@ -12,13 +17,30 @@ const base64ToBuffer = (base64) => {
   for (let i = 0; i < binary.length; i++) {
     buffer[i] = binary.charCodeAt(i);
   }
-  return buffer;
+  return buffer.buffer;
+};
+
+// Convert Base64URL to Base64
+const base64URLToBase64 = (base64URL) => {
+  let base64 = base64URL.replace(/-/g, "+").replace(/_/g, "/");
+  // Pad with '=' if needed
+  while (base64.length % 4) {
+    base64 += "=";
+  }
+  return base64;
+};
+
+// Convert Base64 to Base64URL
+const base64ToBase64URL = (base64) => {
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 };
 
 export class PasskeyAuth {
   constructor() {
-    this.challenge = null;
-    this.apiUrl = "/api"; // Updated to use the proxy
+    // Use the same port as the server (3000) and make it configurable
+    this.apiUrl = import.meta.env.VITE_API_URL || "/api";
+    // Try to get the last registered user ID from localStorage
+    this.lastRegisteredUserId = localStorage.getItem("lastRegisteredUserId");
   }
 
   // Check if the browser supports WebAuthn
@@ -26,144 +48,284 @@ export class PasskeyAuth {
     return window.PublicKeyCredential !== undefined;
   }
 
-  // Generate a random challenge
-  generateChallenge() {
-    const array = new Uint8Array(32);
-    window.crypto.getRandomValues(array);
-    this.challenge = array;
-    return array;
+  // Helper method to handle API errors
+  async handleApiResponse(response, errorMessage) {
+    if (!response.ok) {
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorMessage);
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          // If the error response is not JSON
+          throw new Error(`${errorMessage} (Status: ${response.status})`);
+        }
+        throw e;
+      }
+    }
+    return response.json();
+  }
+
+  // Helper method to ensure window focus
+  async ensureWindowFocus() {
+    if (!document.hasFocus()) {
+      window.focus();
+      // Wait for focus and user interaction
+      return new Promise((resolve) => {
+        const checkFocus = () => {
+          if (document.hasFocus()) {
+            document.removeEventListener("click", handleClick);
+            resolve();
+          }
+        };
+
+        const handleClick = () => {
+          checkFocus();
+        };
+
+        document.addEventListener("click", handleClick);
+        // Also check periodically
+        const interval = setInterval(() => {
+          if (document.hasFocus()) {
+            clearInterval(interval);
+            document.removeEventListener("click", handleClick);
+            resolve();
+          }
+        }, 100);
+
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          clearInterval(interval);
+          document.removeEventListener("click", handleClick);
+          resolve();
+        }, 10000);
+      });
+    }
   }
 
   // Register a new passkey
-  async register(username, displayName, photoURL) {
+  async register(email, displayName, photoURL) {
     try {
-      // Generate registration options
-      const publicKeyCredentialCreationOptions = {
-        challenge: this.generateChallenge(),
-        rp: {
-          name: "Passkey Test App",
-          id: window.location.hostname,
-        },
-        user: {
-          id: new Uint8Array(16),
-          name: username,
-          displayName: displayName,
-        },
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 }, // ES256
-          { type: "public-key", alg: -257 }, // RS256
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform",
-          requireResidentKey: true,
-          userVerification: "required",
-        },
-        timeout: 60000,
+      if (!email) {
+        throw new Error("Email is required for passkey registration");
+      }
+
+      if (!auth.currentUser) {
+        throw new Error(
+          "No authenticated user found. Please sign in with Google first."
+        );
+      }
+
+      const userId = auth.currentUser.uid;
+      localStorage.setItem("lastRegisteredUserId", userId);
+      localStorage.setItem("lastRegisteredEmail", email);
+      this.lastRegisteredUserId = userId;
+
+      await this.ensureWindowFocus();
+
+      // Get registration options from server
+      const optionsResponse = await fetch(
+        `${this.apiUrl}/webauthn/register-options`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            email,
+            displayName,
+            photoURL,
+          }),
+        }
+      );
+
+      const options = await this.handleApiResponse(
+        optionsResponse,
+        "Failed to get registration options"
+      );
+
+      // Convert challenge and user ID to ArrayBuffer
+      options.challenge = base64ToBuffer(base64URLToBase64(options.challenge));
+      options.user.id = base64ToBuffer(base64URLToBase64(options.user.id));
+
+      // Set authenticator selection criteria
+      options.authenticatorSelection = {
+        authenticatorAttachment: "platform",
+        requireResidentKey: true,
+        residentKey: "required",
+        userVerification: "preferred",
       };
 
-      // Create credentials
-      const credential = await navigator.credentials.create({
-        publicKey: publicKeyCredentialCreationOptions,
-      });
+      await this.ensureWindowFocus();
 
-      // Format the response
+      let credential;
+      try {
+        credential = await navigator.credentials.create({
+          publicKey: options,
+        });
+      } catch (error) {
+        if (error.name === "NotAllowedError") {
+          await this.ensureWindowFocus();
+          credential = await navigator.credentials.create({
+            publicKey: options,
+          });
+        } else {
+          throw error;
+        }
+      }
+
       const formattedCredential = {
         id: credential.id,
-        rawId: bufferToBase64(credential.rawId),
+        rawId: base64ToBase64URL(bufferToBase64(credential.rawId)),
         response: {
-          attestationObject: bufferToBase64(
-            credential.response.attestationObject
+          attestationObject: base64ToBase64URL(
+            bufferToBase64(credential.response.attestationObject)
           ),
-          clientDataJSON: bufferToBase64(credential.response.clientDataJSON),
+          clientDataJSON: base64ToBase64URL(
+            bufferToBase64(credential.response.clientDataJSON)
+          ),
         },
         type: credential.type,
       };
 
-      // Register with backend and get Firebase token
-      const response = await fetch(`${this.apiUrl}/register-passkey`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          credential: formattedCredential,
-          userId: username,
-          displayName: displayName,
-          photoURL: photoURL,
-        }),
-      });
+      // Complete registration with server
+      const response = await fetch(
+        `${this.apiUrl}/webauthn/register-complete`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            credential: formattedCredential,
+            userId,
+          }),
+        }
+      );
 
-      if (!response.ok) {
-        throw new Error("Failed to register passkey with server");
-      }
+      const { token } = await this.handleApiResponse(
+        response,
+        "Failed to complete registration"
+      );
 
-      const { token } = await response.json();
-
-      // Sign in to Firebase with the custom token
       await signInWithCustomToken(auth, token);
-
       return formattedCredential;
     } catch (error) {
       console.error("Error registering passkey:", error);
+      if (error.name === "NotAllowedError") {
+        throw new Error("Please click anywhere on the page and try again");
+      } else if (error.name === "NotSupportedError") {
+        throw new Error("Your browser or device doesn't support passkeys");
+      } else if (error.name === "SecurityError") {
+        throw new Error("Security error occurred during registration");
+      }
       throw error;
     }
   }
 
   // Authenticate with passkey
-  async authenticate() {
+  async authenticate(userId = null) {
     try {
-      const publicKeyCredentialRequestOptions = {
-        challenge: this.generateChallenge(),
-        rpId: window.location.hostname,
-        userVerification: "required",
-        timeout: 60000,
-      };
+      const effectiveUserId =
+        userId ||
+        this.lastRegisteredUserId ||
+        localStorage.getItem("lastRegisteredUserId");
+      const userEmail = localStorage.getItem("lastRegisteredEmail");
 
-      // Get credentials
+      if (!effectiveUserId) {
+        throw new Error(
+          "No user ID available. Please register a passkey first by signing in with Google and clicking 'Register New Passkey'."
+        );
+      }
+
+      // Get authentication options from server
+      const optionsResponse = await fetch(
+        `${this.apiUrl}/webauthn/authenticate-options`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: effectiveUserId,
+            email: userEmail,
+          }),
+        }
+      );
+
+      const options = await this.handleApiResponse(
+        optionsResponse,
+        "Failed to get authentication options"
+      );
+
+      // Convert challenge to ArrayBuffer
+      options.challenge = base64ToBuffer(base64URLToBase64(options.challenge));
+
+      if (options.allowCredentials) {
+        options.allowCredentials = options.allowCredentials.map(
+          (credential) => ({
+            ...credential,
+            id: base64ToBuffer(base64URLToBase64(credential.id)),
+            transports: credential.transports || ["internal"],
+          })
+        );
+      }
+
       const credential = await navigator.credentials.get({
-        publicKey: publicKeyCredentialRequestOptions,
+        publicKey: options,
       });
 
-      // Format the response
       const formattedCredential = {
         id: credential.id,
-        rawId: bufferToBase64(credential.rawId),
+        rawId: base64ToBase64URL(bufferToBase64(credential.rawId)),
         response: {
-          authenticatorData: bufferToBase64(
-            credential.response.authenticatorData
+          authenticatorData: base64ToBase64URL(
+            bufferToBase64(credential.response.authenticatorData)
           ),
-          clientDataJSON: bufferToBase64(credential.response.clientDataJSON),
-          signature: bufferToBase64(credential.response.signature),
+          clientDataJSON: base64ToBase64URL(
+            bufferToBase64(credential.response.clientDataJSON)
+          ),
+          signature: base64ToBase64URL(
+            bufferToBase64(credential.response.signature)
+          ),
           userHandle: credential.response.userHandle
-            ? bufferToBase64(credential.response.userHandle)
+            ? base64ToBase64URL(bufferToBase64(credential.response.userHandle))
             : null,
         },
         type: credential.type,
       };
 
-      // Verify with backend and get Firebase token
-      const response = await fetch(`${this.apiUrl}/verify-passkey`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          credentialId: credential.id,
-        }),
-      });
+      // Complete authentication with server
+      const response = await fetch(
+        `${this.apiUrl}/webauthn/authenticate-complete`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            credential: formattedCredential,
+            userId: effectiveUserId,
+          }),
+        }
+      );
 
-      if (!response.ok) {
-        throw new Error("Failed to verify passkey with server");
-      }
+      const { token } = await this.handleApiResponse(
+        response,
+        "Failed to verify authentication"
+      );
 
-      const { token } = await response.json();
-
-      // Sign in to Firebase with the custom token
       await signInWithCustomToken(auth, token);
-
       return formattedCredential;
     } catch (error) {
       console.error("Error authenticating with passkey:", error);
+      if (error.name === "NotAllowedError") {
+        throw new Error("Authentication was cancelled or timed out");
+      } else if (error.name === "NotSupportedError") {
+        throw new Error("Your browser or device doesn't support passkeys");
+      } else if (error.name === "SecurityError") {
+        throw new Error("Security error occurred during authentication");
+      }
       throw error;
     }
   }

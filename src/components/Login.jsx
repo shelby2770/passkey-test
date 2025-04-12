@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { PasskeyAuth } from "../services/PasskeyAuth";
+import { auth } from "../firebase";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [email, setEmail] = useState("");
   const { currentUser, signInWithGoogle } = useAuth();
   const passkeyAuth = new PasskeyAuth();
 
@@ -27,7 +31,11 @@ export default function Login() {
     try {
       setError("");
       setLoading(true);
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      // Store the user ID in localStorage after successful Google sign-in
+      if (result?.user?.uid) {
+        localStorage.setItem("lastRegisteredUserId", result.user.uid);
+      }
     } catch (error) {
       console.error("Google sign in error:", error);
       setError("Failed to sign in with Google: " + error.message);
@@ -49,25 +57,84 @@ export default function Login() {
     }
   }
 
-  async function handlePasskeyRegistration() {
+  async function handleEmailVerification(e) {
+    e.preventDefault();
     try {
       setError("");
       setLoading(true);
 
-      // First ensure user is signed in with Google
-      if (!currentUser) {
-        await signInWithGoogle();
+      // Ensure the page has focus before proceeding
+      if (!document.hasFocus()) {
+        // Focus the window
+        window.focus();
+        // Show a message to the user
+        setError("Please ensure this window is focused and try again.");
+        return;
       }
 
-      // Now register passkey with Google profile info
-      await passkeyAuth.register(
-        currentUser.email,
-        currentUser.displayName,
-        currentUser.photoURL
-      );
+      // First, try to sign in with Google using the provided email
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        login_hint: email,
+      });
+
+      const result = await signInWithPopup(auth, provider);
+
+      if (result.user) {
+        // Store the user information
+        localStorage.setItem("lastRegisteredUserId", result.user.uid);
+        localStorage.setItem("lastRegisteredEmail", email);
+
+        // Add a small delay to ensure the window regains focus after Google popup
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Ensure window has focus again after Google sign-in
+        if (!document.hasFocus()) {
+          window.focus();
+          setError(
+            "Please click anywhere on this page and try registering again."
+          );
+          return;
+        }
+
+        try {
+          // Now proceed with passkey registration using the verified Google account
+          await passkeyAuth.register(
+            email,
+            result.user.displayName || "User",
+            result.user.photoURL
+          );
+
+          setShowModal(false);
+          setError(""); // Clear any previous errors
+        } catch (regError) {
+          console.error("Passkey registration error:", regError);
+          if (regError.name === "NotAllowedError") {
+            setError(
+              "Please ensure this window is focused and try again. If the problem persists, click anywhere on the page first."
+            );
+          } else if (
+            regError.name === "AbortError" ||
+            regError.message.includes("cancelled")
+          ) {
+            setError("Registration was cancelled. Please try again.");
+          } else {
+            setError("Failed to register passkey: " + regError.message);
+          }
+          return;
+        }
+      }
     } catch (error) {
-      console.error("Passkey registration error:", error);
-      setError("Failed to register Passkey: " + error.message);
+      console.error("Registration error:", error);
+      if (error.code === "auth/popup-closed-by-user") {
+        setError("Google sign-in was cancelled. Please try again.");
+      } else if (error.name === "NotAllowedError") {
+        setError("Please ensure this window is focused and try again.");
+      } else {
+        setError(
+          "Please make sure you have a Google account with this email and try again."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -96,40 +163,6 @@ export default function Login() {
               disabled={loading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              {loading ? (
-                <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                  <svg
-                    className="animate-spin h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                </span>
-              ) : (
-                <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z" />
-                  </svg>
-                </span>
-              )}
               Sign in with Google
             </button>
 
@@ -138,13 +171,17 @@ export default function Login() {
                 <button
                   onClick={handlePasskeySignIn}
                   disabled={loading}
-                  className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                    loading
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  }`}
                 >
                   Sign in with Passkey
                 </button>
 
                 <button
-                  onClick={handlePasskeyRegistration}
+                  onClick={() => setShowModal(true)}
                   disabled={loading}
                   className="group relative w-full flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
@@ -155,6 +192,69 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* Registration Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+          <div className="relative bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Register New Passkey
+            </h3>
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-500"
+            >
+              <span className="sr-only">Close</span>
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+
+            <form onSubmit={handleEmailVerification} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Gmail Address
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  required
+                  pattern=".*@gmail\.com$"
+                  placeholder="your.email@gmail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                  loading
+                    ? "bg-indigo-400 cursor-not-allowed"
+                    : "bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                }`}
+              >
+                {loading ? "Registering..." : "Register Passkey"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

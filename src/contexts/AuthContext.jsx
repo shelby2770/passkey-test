@@ -13,6 +13,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   function signInWithGoogle() {
+    // Configure Google provider to request profile information
+    googleProvider.addScope("profile");
+    googleProvider.addScope("email");
     return signInWithPopup(auth, googleProvider);
   }
 
