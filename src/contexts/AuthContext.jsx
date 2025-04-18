@@ -14,9 +14,16 @@ export function AuthProvider({ children }) {
 
   function signInWithGoogle() {
     // Configure Google provider to request profile information
-    googleProvider.addScope("profile");
-    googleProvider.addScope("email");
-    return signInWithPopup(auth, googleProvider);
+    // Note: Scopes are now configured in firebase.js
+    return signInWithPopup(auth, googleProvider)
+      .then((result) => {
+        console.log("Google sign-in successful:", result.user);
+        return result;
+      })
+      .catch((error) => {
+        console.error("Google sign-in error:", error);
+        throw error;
+      });
   }
 
   function logout() {
@@ -25,6 +32,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("Auth state changed:", user);
       setCurrentUser(user);
       setLoading(false);
     });

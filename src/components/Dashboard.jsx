@@ -1,7 +1,36 @@
 import { useAuth } from "../contexts/AuthContext";
+import { useEffect, useState } from "react";
 
 export default function Dashboard() {
   const { currentUser, logout } = useAuth();
+  const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [userName, setUserName] = useState("");
+
+  // Debug user information and set profile image URL
+  useEffect(() => {
+    if (currentUser) {
+      console.log("Current user:", currentUser);
+      console.log("Photo URL:", currentUser.photoURL);
+      console.log("Display name:", currentUser.displayName);
+      console.log("Email:", currentUser.email);
+
+      // Set the user name
+      setUserName(currentUser.displayName || currentUser.email || "User");
+
+      // Set the profile image URL
+      if (currentUser.photoURL) {
+        console.log("Setting profile image URL to:", currentUser.photoURL);
+        setProfileImageUrl(currentUser.photoURL);
+      } else {
+        // Generate fallback avatar URL
+        const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          currentUser.displayName || currentUser.email || "User"
+        )}&background=random`;
+        console.log("Setting fallback URL to:", fallbackUrl);
+        setProfileImageUrl(fallbackUrl);
+      }
+    }
+  }, [currentUser]);
 
   async function handleLogout() {
     try {
@@ -11,11 +40,16 @@ export default function Dashboard() {
     }
   }
 
-  // Get the user's photo URL with a fal lback
-  const userPhotoURL =
-    currentUser?.photoURL ||
-    "https://ui-avatars.com/api/?name=" +
-      encodeURIComponent(currentUser?.displayName || "User");
+  // Handle image load error
+  const handleImageError = (e) => {
+    console.error("Error loading profile image");
+    e.target.onerror = null;
+    const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      userName || "User"
+    )}&background=random`;
+    console.log("Setting fallback URL on error to:", fallbackUrl);
+    setProfileImageUrl(fallbackUrl);
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -32,17 +66,12 @@ export default function Dashboard() {
                 <div className="flex items-center">
                   <img
                     className="h-8 w-8 rounded-full object-cover"
-                    src={userPhotoURL}
-                    alt="Profile"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src =
-                        "https://ui-avatars.com/api/?name=" +
-                        encodeURIComponent(currentUser?.displayName || "User");
-                    }}
+                    src={profileImageUrl}
+                    alt={`${userName}'s profile`}
+                    onError={handleImageError}
                   />
                   <span className="ml-2 text-sm font-medium text-gray-700">
-                    {currentUser?.displayName || currentUser?.email}
+                    {userName}
                   </span>
                   <button
                     onClick={handleLogout}
