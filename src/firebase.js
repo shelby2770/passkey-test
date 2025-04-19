@@ -3,7 +3,9 @@ import {
   getAuth,
   signInWithCustomToken,
   GoogleAuthProvider,
+  OAuthProvider,
 } from "firebase/auth";
+import { auth0Config } from "./auth0-config";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -28,4 +30,15 @@ googleProvider.setCustomParameters({
   prompt: "select_account",
 });
 
-export { auth, googleProvider, signInWithCustomToken };
+// Configure Auth0 provider
+const auth0Provider = new OAuthProvider("oidc.default-app");
+auth0Provider.setCustomParameters({
+  domain: auth0Config.domain,
+  client_id: auth0Config.clientId,
+  redirect_uri: auth0Config.redirectUri,
+  response_type: auth0Config.responseType,
+  scope: auth0Config.scope,
+  audience: auth0Config.audience,
+});
+
+export { auth, googleProvider, auth0Provider, signInWithCustomToken };

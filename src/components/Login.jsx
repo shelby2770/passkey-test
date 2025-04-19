@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { PasskeyAuth } from "../services/PasskeyAuth";
 import { auth } from "../firebase";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const [error, setError] = useState("");
@@ -10,8 +11,17 @@ export default function Login() {
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [email, setEmail] = useState("");
-  const { currentUser, signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInWithAuth0, currentUser } = useAuth();
   const passkeyAuth = new PasskeyAuth();
+  const navigate = useNavigate();
+
+  // Handle navigation when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      console.log("User is authenticated, navigating to dashboard");
+      navigate("/dashboard");
+    }
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     const checkPasskeySupport = async () => {
@@ -39,6 +49,23 @@ export default function Login() {
     } catch (error) {
       console.error("Google sign in error:", error);
       setError("Failed to sign in with Google: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAuth0SignIn() {
+    try {
+      setError("");
+      setLoading(true);
+      const result = await signInWithAuth0();
+      // Store the user ID in localStorage after successful Auth0 sign-in
+      if (result?.user?.uid) {
+        localStorage.setItem("lastRegisteredUserId", result.user.uid);
+      }
+    } catch (error) {
+      console.error("Auth0 sign in error:", error);
+      setError("Failed to sign in with Auth0: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -164,6 +191,14 @@ export default function Login() {
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Sign in with Google
+            </button>
+
+            <button
+              onClick={handleAuth0SignIn}
+              disabled={loading}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              Sign in with Auth0
             </button>
 
             {passkeySupported && (

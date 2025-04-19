@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { auth, googleProvider } from "../firebase";
+import { auth, googleProvider, auth0Provider } from "../firebase";
 
 const AuthContext = createContext();
 
@@ -26,6 +26,19 @@ export function AuthProvider({ children }) {
       });
   }
 
+  function signInWithAuth0() {
+    // Sign in with Auth0 using OpenID Connect
+    return signInWithPopup(auth, auth0Provider)
+      .then((result) => {
+        console.log("Auth0 sign-in successful:", result.user);
+        return result;
+      })
+      .catch((error) => {
+        console.error("Auth0 sign-in error:", error);
+        throw error;
+      });
+  }
+
   function logout() {
     return signOut(auth);
   }
@@ -43,6 +56,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     signInWithGoogle,
+    signInWithAuth0,
     logout,
   };
 
