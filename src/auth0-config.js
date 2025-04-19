@@ -1,22 +1,22 @@
 // Auth0 configuration
-export const auth0Config = {
+const auth0Config = {
   domain: "dev-lp7wfteq8g2uknt8.us.auth0.com",
-  clientId: "0ualXgjpcqecv6JBUfOuvpD9AgW2IpfA",
-  redirectUri: window.location.origin + "/auth/callback",
+  clientId: "0ualXgjpcqecv6JBUf0uvpD9AgW2IpfA",
+  redirectUri: "http://localhost:5173/auth/callback",
+  responseType: "token id_token",
   scope: "openid profile email",
-  responseType: "code",
-  // The audience should be your Auth0 domain
-  audience: "https://dev-lp7wfteq8g2uknt8.us.auth0.com",
-  // Auth0 tenant region
-  region: "us",
+  // Make sure issuer matches exactly with the domain
+  issuer: "https://dev-lp7wfteq8g2uknt8.us.auth0.com",
 };
 
-// Auth0 provider configuration for OIDC
+export default auth0Config;
+
+// Auth0 provider configuration for Firebase
 export const auth0ProviderConfig = {
-  authority: `https://${auth0Config.domain}`,
+  domain: auth0Config.domain,
+  issuer: auth0Config.issuer,
   client_id: auth0Config.clientId,
   redirect_uri: auth0Config.redirectUri,
-  scope: auth0Config.scope,
-  audience: auth0Config.audience,
-  response_type: auth0Config.responseType,
+  response_type: "token id_token",
+  scope: "openid profile email",
 };

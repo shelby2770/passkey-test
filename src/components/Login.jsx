@@ -2,8 +2,13 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { PasskeyAuth } from "../services/PasskeyAuth";
 import { auth } from "../firebase";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  OAuthProvider,
+} from "firebase/auth";
 import { useNavigate } from "react-router-dom";
+import auth0Config, { auth0ProviderConfig } from "../auth0-config";
 
 export default function Login() {
   const [error, setError] = useState("");
@@ -56,15 +61,70 @@ export default function Login() {
 
   async function handleAuth0SignIn() {
     try {
+      console.log("Starting Auth0 sign-in process...");
       setError("");
       setLoading(true);
-      const result = await signInWithAuth0();
-      // Store the user ID in localStorage after successful Auth0 sign-in
-      if (result?.user?.uid) {
-        localStorage.setItem("lastRegisteredUserId", result.user.uid);
+
+      console.log("Auth0 configuration:", {
+        domain: auth0Config.domain,
+        clientId: auth0Config.clientId,
+        redirectUri: auth0Config.redirectUri,
+        responseType: auth0Config.responseType,
+        scope: auth0Config.scope,
+        issuer: auth0Config.issuer,
+      });
+
+      console.log("Initializing Auth0 provider...");
+      const provider = new OAuthProvider("auth0.com");
+
+      // Set all required custom parameters
+      provider.setCustomParameters({
+        domain: auth0Config.domain,
+        auth_uri: `https://${auth0Config.domain}/authorize`,
+        token_uri: `https://${auth0Config.domain}/oauth/token`,
+        issuer: auth0Config.issuer,
+        client_id: auth0Config.clientId,
+        response_type: "token id_token",
+        scope: "openid profile email",
+      });
+
+      // Add required scopes
+      provider.addScope("openid");
+      provider.addScope("profile");
+      provider.addScope("email");
+
+      try {
+        console.log("Attempting Firebase signInWithPopup...");
+        const result = await signInWithPopup(auth, provider);
+
+        console.log("Auth0 sign-in successful:", {
+          uid: result.user.uid,
+          email: result.user.email,
+          providerId: result.providerId,
+        });
+
+        if (result?.user?.uid) {
+          localStorage.setItem("lastRegisteredUserId", result.user.uid);
+          console.log("User ID stored in localStorage");
+        }
+      } catch (signInError) {
+        console.error("Firebase signInWithPopup error:", {
+          code: signInError.code,
+          message: signInError.message,
+          credential: signInError.credential,
+          email: signInError.email,
+          stack: signInError.stack,
+        });
+        throw signInError;
       }
     } catch (error) {
-      console.error("Auth0 sign in error:", error);
+      console.error("Auth0 sign-in detailed error:", {
+        name: error.name,
+        code: error.code,
+        message: error.message,
+        stack: error.stack,
+        customData: error.customData,
+      });
       setError("Failed to sign in with Auth0: " + error.message);
     } finally {
       setLoading(false);

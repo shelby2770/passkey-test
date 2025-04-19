@@ -5,7 +5,7 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
 } from "firebase/auth";
-import { auth0Config } from "./auth0-config";
+import auth0Config from "./auth0-config";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -31,14 +31,30 @@ googleProvider.setCustomParameters({
 });
 
 // Configure Auth0 provider
-const auth0Provider = new OAuthProvider("oidc.default-app");
+const auth0Provider = new OAuthProvider("auth0.com");
 auth0Provider.setCustomParameters({
+  // Auth0 domain
   domain: auth0Config.domain,
+  // Auth endpoints
+  auth_uri: `https://${auth0Config.domain}/authorize`,
+  token_uri: `https://${auth0Config.domain}/oauth/token`,
+  // Issuer URL must match exactly
+  issuer: auth0Config.issuer,
   client_id: auth0Config.clientId,
-  redirect_uri: auth0Config.redirectUri,
-  response_type: auth0Config.responseType,
-  scope: auth0Config.scope,
-  audience: auth0Config.audience,
+  // Response type and scope
+  response_type: "token id_token",
+  scope: "openid profile email",
 });
+
+// Add required scopes
+auth0Provider.addScope("openid");
+auth0Provider.addScope("profile");
+auth0Provider.addScope("email");
+
+// Add error handling for Auth0 provider
+auth0Provider.credentialFromError = (error) => {
+  console.error("Auth0 credential error:", error);
+  return null;
+};
 
 export { auth, googleProvider, auth0Provider, signInWithCustomToken };

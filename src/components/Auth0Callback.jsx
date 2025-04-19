@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase";
 import { signInWithCredential, OAuthProvider } from "firebase/auth";
+import auth0Config from "../auth0-config";
 
 export default function Auth0Callback() {
   const [error, setError] = useState(null);
@@ -10,35 +11,84 @@ export default function Auth0Callback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Get the authorization code from the URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get("code");
-        const state = urlParams.get("state");
+        console.log("Starting Auth0 callback handling...");
+        console.log("Current URL:", window.location.href);
 
-        if (!code) {
-          throw new Error("No authorization code found in the URL");
+        // Get the tokens from the URL hash
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const idToken = params.get("id_token");
+        const accessToken = params.get("access_token");
+        const error = params.get("error");
+        const errorDescription = params.get("error_description");
+
+        console.log("URL Parameters:", {
+          hash: hash,
+          idToken: idToken ? "present" : "missing",
+          accessToken: accessToken ? "present" : "missing",
+          error: error,
+          errorDescription: errorDescription,
+        });
+
+        if (error) {
+          throw new Error(`Auth0 error: ${error} - ${errorDescription}`);
         }
 
-        // Create the credential
-        const provider = new OAuthProvider("oidc.default-app");
+        if (!idToken) {
+          throw new Error("No ID token found in the URL");
+        }
+
+        // Create the credential with the ID token
+        console.log("Creating Firebase credential...");
+        const provider = new OAuthProvider("auth0.com");
+
+        // Log the credential parameters
+        console.log("Credential parameters:", {
+          provider: provider.providerId,
+          idToken: idToken ? "present" : "missing",
+          accessToken: accessToken ? "present" : "missing",
+        });
+
         const credential = provider.credential({
-          idToken: code,
-          rawNonce: state,
+          idToken,
+          accessToken,
         });
 
         // Sign in with the credential
-        const result = await signInWithCredential(auth, credential);
-        console.log("Auth0 sign-in successful:", result);
+        console.log("Attempting Firebase sign in...");
+        try {
+          const result = await signInWithCredential(auth, credential);
+          console.log("Firebase sign-in successful:", {
+            uid: result.user.uid,
+            email: result.user.email,
+            isAnonymous: result.user.isAnonymous,
+          });
 
-        // Store user info
-        if (result?.user?.uid) {
-          localStorage.setItem("lastRegisteredUserId", result.user.uid);
+          // Store user info
+          if (result?.user?.uid) {
+            localStorage.setItem("lastRegisteredUserId", result.user.uid);
+            console.log("User info stored in localStorage");
+          }
+
+          // Redirect to dashboard
+          navigate("/dashboard");
+        } catch (firebaseError) {
+          console.error("Firebase sign-in error:", {
+            code: firebaseError.code,
+            message: firebaseError.message,
+            stack: firebaseError.stack,
+            credential: credential ? "present" : "missing",
+          });
+          throw firebaseError;
         }
-
-        // Redirect to dashboard
-        navigate("/dashboard");
       } catch (error) {
-        console.error("Auth0 callback error:", error);
+        console.error("Auth0 callback detailed error:", {
+          name: error.name,
+          message: error.message,
+          code: error.code,
+          stack: error.stack,
+          location: window.location.href,
+        });
         setError(error.message);
       }
     };
