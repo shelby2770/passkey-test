@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import LoginButton from "./LoginButton";
 
 export default function Login() {
   const [error, setError] = useState("");
@@ -58,6 +59,8 @@ export default function Login() {
             >
               Sign in with Google
             </button>
+
+            <LoginButton />
           </div>
         </div>
       </div>

@@ -16,7 +16,7 @@ function ProtectedRoute({ children }) {
   if (!currentUser) {
     return <Navigate to="/" />;
   }
-
+``
   return children;
 }
 

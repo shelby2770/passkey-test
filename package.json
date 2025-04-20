@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@auth0/auth0-react": "^2.3.0",
     "firebase": "^10.8.0",
     "oidc-client-ts": "^3.2.0",
     "oidc-react": "^3.4.1",
