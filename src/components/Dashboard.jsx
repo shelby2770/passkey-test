@@ -21,13 +21,6 @@ export default function Dashboard() {
       if (currentUser.photoURL) {
         console.log("Setting profile image URL to:", currentUser.photoURL);
         setProfileImageUrl(currentUser.photoURL);
-      } else {
-        // Generate fallback avatar URL
-        const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          currentUser.displayName || currentUser.email || "User"
-        )}&background=random`;
-        console.log("Setting fallback URL to:", fallbackUrl);
-        setProfileImageUrl(fallbackUrl);
       }
     }
   }, [currentUser]);
@@ -42,6 +35,7 @@ export default function Dashboard() {
 
   // Handle image load error
   const handleImageError = (e) => {
+    console.log(profileImageUrl);
     console.error("Error loading profile image");
     e.target.onerror = null;
     const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
