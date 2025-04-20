@@ -8,7 +8,6 @@ import {
 } from "react-router-dom";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
-import Auth0Callback from "./components/Auth0Callback";
 
 // Protected route component
 function ProtectedRoute({ children }) {
@@ -25,7 +24,6 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={<Login />} />
-      <Route path="/auth/callback" element={<Auth0Callback />} />
       <Route
         path="/dashboard"
         element={

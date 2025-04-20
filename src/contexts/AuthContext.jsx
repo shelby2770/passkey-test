@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { auth, googleProvider, auth0Provider } from "../firebase";
+import { auth, googleProvider } from "../firebase";
 
 const AuthContext = createContext();
 
@@ -13,8 +13,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   function signInWithGoogle() {
-    // Configure Google provider to request profile information
-    // Note: Scopes are now configured in firebase.js
     return signInWithPopup(auth, googleProvider)
       .then((result) => {
         console.log("Google sign-in successful:", result.user);
@@ -22,19 +20,6 @@ export function AuthProvider({ children }) {
       })
       .catch((error) => {
         console.error("Google sign-in error:", error);
-        throw error;
-      });
-  }
-
-  function signInWithAuth0() {
-    // Sign in with Auth0 using OpenID Connect
-    return signInWithPopup(auth, auth0Provider)
-      .then((result) => {
-        console.log("Auth0 sign-in successful:", result.user);
-        return result;
-      })
-      .catch((error) => {
-        console.error("Auth0 sign-in error:", error);
         throw error;
       });
   }
@@ -56,7 +41,6 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     signInWithGoogle,
-    signInWithAuth0,
     logout,
   };
 

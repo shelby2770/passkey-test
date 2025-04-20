@@ -1,6 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
-import auth0Config from "./auth0-config";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -20,20 +19,6 @@ const auth = getAuth(app);
 // Configure Google provider with necessary scopes
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("profile");
+googleProvider.addScope("email");
 
-// Configure Auth0 provider
-const auth0Provider = new OAuthProvider("auth0.com");
-auth0Provider.setCustomParameters({
-  domain: auth0Config.domain,
-  auth_uri: `https://${auth0Config.domain}/authorize`,
-  token_uri: `https://${auth0Config.domain}/oauth/token`,
-  issuer: auth0Config.issuer,
-  client_id: auth0Config.clientId,
-  response_type: "token id_token",
-  scope: "openid profile email",
-});
-auth0Provider.addScope("openid");
-auth0Provider.addScope("profile");
-auth0Provider.addScope("email");
-
-export { auth, googleProvider, auth0Provider };
+export { auth, googleProvider };

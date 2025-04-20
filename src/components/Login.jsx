@@ -1,18 +1,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { auth } from "../firebase";
-import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  OAuthProvider,
-} from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import auth0Config, { auth0ProviderConfig } from "../auth0-config";
 
 export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signInWithGoogle, signInWithAuth0, currentUser } = useAuth();
+  const { signInWithGoogle, currentUser } = useAuth();
   const navigate = useNavigate();
 
   // Handle navigation when currentUser changes
@@ -31,25 +24,6 @@ export default function Login() {
     } catch (error) {
       console.error("Google sign in error:", error);
       setError("Failed to sign in with Google: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleAuth0SignIn() {
-    try {
-      setError("");
-      setLoading(true);
-      await signInWithAuth0();
-    } catch (error) {
-      console.error("Auth0 sign-in detailed error:", {
-        name: error.name,
-        code: error.code,
-        message: error.message,
-        stack: error.stack,
-        customData: error.customData,
-      });
-      setError("Failed to sign in with Auth0: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -83,18 +57,6 @@ export default function Login() {
               }`}
             >
               Sign in with Google
-            </button>
-
-            <button
-              onClick={handleAuth0SignIn}
-              disabled={loading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
-                loading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-              }`}
-            >
-              Sign in with Auth0
             </button>
           </div>
         </div>
