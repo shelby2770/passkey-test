@@ -1,21 +1,23 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import LoginButton from "./LoginButton";
 
 export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { signInWithGoogle, currentUser } = useAuth();
+  const { user, isAuthenticated } = useAuth0();
   const navigate = useNavigate();
-
-  // Handle navigation when currentUser changes
+  console.log("Hi", currentUser, user, isAuthenticated);
+  // Handle navigation when currentUser or Auth0 authentication status changes
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser || isAuthenticated) {
       console.log("User is authenticated, navigating to dashboard");
       navigate("/dashboard");
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, isAuthenticated, navigate]);
 
   async function handleGoogleSignIn() {
     try {

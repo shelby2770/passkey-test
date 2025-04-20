@@ -8,15 +8,16 @@ import {
 } from "react-router-dom";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
-
+import { useAuth0 } from "@auth0/auth0-react";
 // Protected route component
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
-
-  if (!currentUser) {
+  const { user, isAuthenticated } = useAuth0();
+  if (!currentUser && !isAuthenticated) {
+    console.log("first", user, isAuthenticated);
     return <Navigate to="/" />;
   }
-``
+  ``;
   return children;
 }
 
